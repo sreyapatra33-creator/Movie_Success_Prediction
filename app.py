@@ -1,4 +1,5 @@
 import joblib
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -20,107 +21,147 @@ st.write("Enter the movie details below to predict its IMDb rating category.")
 
 @st.cache_resource
 def load_artifacts():
-
     return {
-        "model": joblib.load("models/best_random_forest.pkl"),
-        "encoder": joblib.load("models/encoder.pkl"),
-        "scaler": joblib.load("models/scaler.pkl"),
+        "model": joblib.load("models/best_model.pkl"),
         "label_encoder": joblib.load("models/label_encoder.pkl"),
-        "cat_cols": joblib.load("models/categorical_columns.pkl"),
-        "num_cols": joblib.load("models/numerical_columns.pkl"),
+        "scaler": joblib.load("models/scaler.pkl"),
+        "cv_genres": joblib.load("models/cv_genres.pkl"),
+        "tfidf_kw": joblib.load("models/tfidf_kw.pkl"),
         "selected_features": joblib.load("models/selected_features.pkl"),
+        "freq_lookups": joblib.load("models/freq_lookups.pkl"),
+        "rare_category_maps": joblib.load("models/rare_category_maps.pkl"),
+        "num_cols": joblib.load("models/num_cols.pkl"),
         "category_values": joblib.load("models/category_values.pkl"),
     }
 
 artifacts = load_artifacts()
 
 model = artifacts["model"]
-encoder = artifacts["encoder"]
-scaler = artifacts["scaler"]
 label_encoder = artifacts["label_encoder"]
-
-cat_cols = artifacts["cat_cols"]
-num_cols = artifacts["num_cols"]
-
+scaler = artifacts["scaler"]
+cv_genres = artifacts["cv_genres"]
+tfidf_kw = artifacts["tfidf_kw"]
 selected_features = artifacts["selected_features"]
+freq_lookups = artifacts["freq_lookups"]
+rare_category_maps = artifacts["rare_category_maps"]
+num_cols = artifacts["num_cols"]
 category_values = artifacts["category_values"]
 
 # ==========================================================
-# User Inputs
+# User Inputs Form Structure
 # ==========================================================
-
-st.header("Movie Information")
 
 user_input = {}
 
-# ---------- Numerical ----------
+tab1, tab2, tab3 = st.tabs(["General & Overview", "Cast & Crew", "Metrics & Engagement"])
 
-for col in num_cols:
+with tab1:
+    col1, col2 = st.columns(2)
+    with col1:
+        user_input['title_year'] = st.number_input("Release Year", min_value=1900, max_value=2026, value=2020)
+        user_input['duration'] = st.number_input("Duration (minutes)", min_value=1, max_value=500, value=120)
+        user_input['color'] = st.selectbox("Color / B&W", options=["Color", "Black and White"])
+        user_input['content_rating'] = st.selectbox("Content Rating", options=category_values['content_rating'])
+    with col2:
+        user_input['language'] = st.selectbox("Language", options=category_values['language'])
+        user_input['country'] = st.selectbox("Country", options=category_values['country'])
 
-    user_input[col] = st.number_input(
-        label=col.replace("_", " ").title(),
-        value=0.0
-    )
+        # Lowercase default check to align with CountVectorizer features
+        default_genres = [g for g in ["action"] if g in category_values['genres']]
+        user_input['genres'] = st.multiselect(
+            "Genres",
+            options=category_values['genres'],
+            default=default_genres
+        )
+        user_input['plot_keywords'] = st.text_input("Plot Keywords (space-separated)", value="hero battle future")
 
-# ---------- Categorical ----------
+with tab2:
+    col1, col2 = st.columns(2)
+    with col1:
+        user_input['director_name'] = st.selectbox("Director Name", options=category_values['director_name'])
+        user_input['director_facebook_likes'] = st.number_input("Director Facebook Likes", min_value=0, value=500)
+        user_input['actor_1_name'] = st.selectbox("Lead Actor Name", options=category_values['actor_1_name'])
+        user_input['actor_1_facebook_likes'] = st.number_input("Lead Actor Facebook Likes", min_value=0, value=1000)
+    with col2:
+        user_input['actor_2_name'] = st.selectbox("Supporting Actor 1 Name", options=category_values['actor_2_name'])
+        user_input['actor_2_facebook_likes'] = st.number_input("Supporting Actor 1 Facebook Likes", min_value=0, value=500)
+        user_input['actor_3_name'] = st.selectbox("Supporting Actor 2 Name", options=category_values['actor_3_name'])
+        user_input['actor_3_facebook_likes'] = st.number_input("Supporting Actor 2 Facebook Likes", min_value=0, value=250)
+        user_input['cast_total_facebook_likes'] = st.number_input("Total Cast Facebook Likes", min_value=0, value=2500)
 
-for col in cat_cols:
-
-    user_input[col] = st.selectbox(
-        label=col.replace("_", " ").title(),
-        options=category_values[col]
-    )
+with tab3:
+    col1, col2 = st.columns(2)
+    with col1:
+        user_input['budget'] = st.number_input("Budget ($)", min_value=0, value=50000000)
+        user_input['gross'] = st.number_input("Gross Earnings ($)", min_value=0, value=100000000)
+        user_input['movie_facebook_likes'] = st.number_input("Movie Facebook Likes", min_value=0, value=5000)
+        user_input['facenumber_in_poster'] = st.number_input("Faces in Poster", min_value=0, value=1)
+    with col2:
+        user_input['aspect_ratio'] = st.number_input("Aspect Ratio", min_value=0.0, value=2.35)
+        user_input['num_critic_for_reviews'] = st.number_input("Critic Reviews Count", min_value=0, value=150)
+        user_input['num_user_for_reviews'] = st.number_input("User Reviews Count", min_value=0, value=300)
+        user_input['num_voted_users'] = st.number_input("Total Voted Users", min_value=0, value=50000)
 
 # ==========================================================
-# Predict Button
+# Predict Button & Processing
 # ==========================================================
 
-if st.button("Predict IMDb Rating", use_container_width=True):
+st.write("---")
+
+if st.button("Predict IMDb Rating Category", use_container_width=True):
 
     input_df = pd.DataFrame([user_input])
 
-    # -----------------------------
-    # Encode categorical variables
-    # -----------------------------
+    # 1. Feature Engineering & Derived Features
+    input_df['log_budget'] = np.log1p(max(input_df['budget'].iloc[0], 0))
+    input_df['log_gross'] = np.log1p(max(input_df['gross'].iloc[0], 0))
+    input_df['roi'] = (input_df['gross'] - input_df['budget']) / (input_df['budget'] + 1000)
+    input_df['review_ratio'] = input_df['num_user_for_reviews'] / (input_df['num_critic_for_reviews'] + 1)
+    input_df['votes_per_review'] = input_df['num_voted_users'] / (input_df['num_user_for_reviews'] + 1)
+    input_df['actor_lead_share'] = input_df['actor_1_facebook_likes'] / (input_df['cast_total_facebook_likes'] + 1)
+    input_df['director_share'] = input_df['director_facebook_likes'] / (input_df['cast_total_facebook_likes'] + 1)
+    input_df['movie_age'] = 2026 - input_df['title_year'].iloc[0]
+    input_df['is_color'] = 1 if input_df['color'].iloc[0] == 'Color' else 0
 
-    encoded_cat = encoder.transform(
-        input_df[cat_cols]
+    # 2. Text Vectorization (Genres & Keywords)
+    genres_str = " ".join(input_df['genres'].iloc[0]) if isinstance(input_df['genres'].iloc[0], list) else str(input_df['genres'].iloc[0])
+    genres_encoded = pd.DataFrame(
+        cv_genres.transform([genres_str]).toarray(),
+        columns=[f"genre_{w}" for w in cv_genres.get_feature_names_out()]
     )
 
-    # -----------------------------
-    # Scale numerical variables
-    # -----------------------------
-
-    scaled_num = pd.DataFrame(
-        scaler.transform(input_df[num_cols]),
-        columns=num_cols
+    keywords_str = str(input_df['plot_keywords'].iloc[0]).replace('|', ' ')
+    keywords_encoded = pd.DataFrame(
+        tfidf_kw.transform([keywords_str]).toarray(),
+        columns=[f"kw_{w}" for w in tfidf_kw.get_feature_names_out()]
     )
 
-    # -----------------------------
-    # Merge
-    # -----------------------------
+    # 3. Frequency Encoding for High-Cardinality Names
+    freq_data = {}
+    for col in ['director_name', 'actor_1_name', 'actor_2_name', 'actor_3_name']:
+        val = input_df[col].iloc[0]
+        freq_data[f'{col}_freq'] = freq_lookups[col].get(val, 0)
+    freq_df = pd.DataFrame([freq_data])
 
-    processed = pd.concat(
-        [scaled_num, encoded_cat],
-        axis=1
-    )
+    # 4. Rare Grouping & One-Hot Flags for Categoricals
+    cat_flags = {}
+    for col in ['country', 'language', 'content_rating']:
+        val = input_df[col].iloc[0]
+        grouped_val = val if val in rare_category_maps[col] else 'Other'
+        cat_flags[f'{col}_grouped_{grouped_val}'] = 1
+    cat_df = pd.DataFrame([cat_flags])
 
-    # -----------------------------
-    # Keep selected features only
-    # -----------------------------
+    # 5. Scale Numerical Variables
+    scaled_num = input_df[num_cols].copy()
+    scaled_num[num_cols] = scaler.transform(scaled_num[num_cols])
 
-    processed = processed[selected_features]
+    # 6. Combine Features & Align to Selected Model Features
+    processed = pd.concat([scaled_num, freq_df, genres_encoded, keywords_encoded, cat_df], axis=1)
+    processed = processed.reindex(columns=selected_features, fill_value=0)
 
-    # -----------------------------
-    # Prediction
-    # -----------------------------
+    # 7. Model Prediction
+    prediction_idx = model.predict(processed)[0]
+    prediction = label_encoder.inverse_transform([prediction_idx])[0]
 
-    prediction = model.predict(processed)[0]
-
-    prediction = label_encoder.inverse_transform([prediction])[0]
-
-    # -----------------------------
-    # Display
-    # -----------------------------
-
+    # 8. Display Results
     st.success(f"Predicted IMDb Rating Category: **{prediction}**")
