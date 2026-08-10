@@ -1,5 +1,5 @@
 
-# URL: [Streamlit Application Link](https://moviesuccessprediction-bp6xhm6wvpvctv52cx4sl9.streamlit.app/)
+# URL: [Streamlit Application Link](https://moviesuccessprediction-gsdcskfh5yrrg3r4d8uvtd.streamlit.app/)
 
 # 🎬 Movie Success Prediction using Machine Learning
 
@@ -107,7 +107,7 @@ Duplicate records were checked and removed.
 ### ✔ Encoding
 
 - Label Encoding
-- Target Encoding
+- Frequency Encoding
 
 ### ✔ Feature Engineering
 
