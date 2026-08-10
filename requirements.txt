@@ -1,9 +1,27 @@
+# 🎬 Movie Success Prediction — Project Dependencies
+
+# =================================================
+
+# 📦 Core Data Science Libraries
+
 joblib==1.5.3
 numpy==2.4.6
 pandas==2.3.3
+
+# 📊 Data Visualization
+
 matplotlib==3.11.1
 seaborn==0.13.2
+
+# 🤖 Machine Learning
+
 scikit-learn==1.9.0
 xgboost==3.4.0
+
+# 🔤 Categorical Feature Encoding
+
 category-encoders==2.8.1
+
+# 🚀 Model Deployment & Web App
+
 streamlit==1.49.1
