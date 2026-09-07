@@ -2,6 +2,13 @@ import joblib
 import numpy as np
 import pandas as pd
 import streamlit as st
+from pathlib import Path
+
+
+# Resolve files relative to this script, so the app works when launched from
+# Streamlit Community Cloud, a terminal in another directory, or an IDE.
+BASE_DIR = Path(__file__).resolve().parent
+MODEL_DIR = BASE_DIR / "models"
 
 # ==========================================================
 # Page Configuration
@@ -14,6 +21,7 @@ st.set_page_config(
 
 st.title("IMDb Movie Rating Predictor")
 st.write("Enter the movie details below to predict its IMDb rating category.")
+st.caption("Predictions are based on the model trained in `model_training.ipynb`.")
 
 # ==========================================================
 # Load Saved Objects
@@ -22,16 +30,16 @@ st.write("Enter the movie details below to predict its IMDb rating category.")
 @st.cache_resource
 def load_artifacts():
     return {
-        "model": joblib.load("models/best_model.pkl"),
-        "label_encoder": joblib.load("models/label_encoder.pkl"),
-        "scaler": joblib.load("models/scaler.pkl"),
-        "cv_genres": joblib.load("models/cv_genres.pkl"),
-        "tfidf_kw": joblib.load("models/tfidf_kw.pkl"),
-        "selected_features": joblib.load("models/selected_features.pkl"),
-        "freq_lookups": joblib.load("models/freq_lookups.pkl"),
-        "rare_category_maps": joblib.load("models/rare_category_maps.pkl"),
-        "num_cols": joblib.load("models/num_cols.pkl"),
-        "category_values": joblib.load("models/category_values.pkl"),
+        "model": joblib.load(MODEL_DIR / "best_model.pkl"),
+        "label_encoder": joblib.load(MODEL_DIR / "label_encoder.pkl"),
+        "scaler": joblib.load(MODEL_DIR / "scaler.pkl"),
+        "cv_genres": joblib.load(MODEL_DIR / "cv_genres.pkl"),
+        "tfidf_kw": joblib.load(MODEL_DIR / "tfidf_kw.pkl"),
+        "selected_features": joblib.load(MODEL_DIR / "selected_features.pkl"),
+        "freq_lookups": joblib.load(MODEL_DIR / "freq_lookups.pkl"),
+        "rare_category_maps": joblib.load(MODEL_DIR / "rare_category_maps.pkl"),
+        "num_cols": joblib.load(MODEL_DIR / "num_cols.pkl"),
+        "category_values": joblib.load(MODEL_DIR / "category_values.pkl"),
     }
 
 artifacts = load_artifacts()
@@ -165,3 +173,7 @@ if st.button("Predict IMDb Rating Category", use_container_width=True):
 
     # 8. Display Results
     st.success(f"Predicted IMDb Rating Category: **{prediction}**")
+
+    if hasattr(model, "predict_proba"):
+        confidence = float(np.max(model.predict_proba(processed)[0]))
+        st.caption(f"Model confidence: {confidence:.1%}")
